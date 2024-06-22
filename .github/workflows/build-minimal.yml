@@ -25,9 +25,6 @@ jobs:
             version: openwrt-23.05
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@main
-
     - name: Set time zone
       run: sudo timedatectl set-timezone 'Asia/Shanghai'
 
@@ -101,17 +98,19 @@ jobs:
     - name: Mount LV
       run: |
         sudo mkdir -p /builder
-        sudo mount /dev/github/runner /builder
+        sudo mount /dev/github/runner ${{ github.workspace }}
+        sudo mount --bind ${{ github.workspace }} /builder
         sudo chown -R runner:runner /builder
-        df -Th / /mnt /builder
+        df -Th ${{ github.workspace }} /builder
 
     - name: Install LLVM
       run: |
         export PATH="/opt/clang/bin:$PATH"
+        echo "/opt/clang/bin" >> $GITHUB_PATH
         mkdir /opt/clang
-        wget -q https://github.com/sbwml/redhat-llvm-project/releases/download/18.1.7/clang-18.1.7-x86_64-redhat-linux.tar.xz
-        sudo tar --strip-components=1 -C /opt/clang -xf clang-18.1.7-x86_64-redhat-linux.tar.xz
-        rm -rf clang-18.1.7-x86_64-redhat-linux.tar.xz
+        wget -q https://github.com/sbwml/redhat-llvm-project/releases/download/18.1.8/clang-18.1.8-x86_64-redhat-linux.tar.xz
+        sudo tar --strip-components=1 -C /opt/clang -xf clang-18.1.8-x86_64-redhat-linux.tar.xz
+        rm -rf clang-18.1.8-x86_64-redhat-linux.tar.xz
         clang --version
 
     - name: Compile OpenWrt
@@ -119,7 +118,6 @@ jobs:
       continue-on-error: true
       working-directory: /builder
       run: |
-        export PATH="/opt/clang/bin:$PATH"
         [ "${{ matrix.model }}" != "netgear_r8500" ] && export KERNEL_CLANG_LTO=y
         BUILD_FAST=y ENABLE_OTA=y ENABLE_BPF=y ENABLE_LTO=y ENABLE_LRNG=y MINIMAL_BUILD=y USE_GCC15=y USE_MOLD=y bash <(curl -sS ${{ secrets.script_url_general }}) ${{ matrix.tag.type }} ${{ matrix.model }}
         cd openwrt
@@ -130,7 +128,6 @@ jobs:
       if: steps.compile.outcome == 'failure'
       working-directory: /builder
       run: |
-        export PATH="/opt/clang/bin:$PATH"
         cd openwrt
         make V=s
 
@@ -176,7 +173,7 @@ jobs:
         elif [ "${{ matrix.model }}" = "netgear_r8500" ]; then
           device_id=${{ secrets.device_id_netgear_minimal }}
         fi
-        sudo curl -L ${{ secrets.aliyunpan_go }} -o /bin/aliyunpan --progress-bar
+        sudo wget -q ${{ secrets.aliyunpan_go }} -O /bin/aliyunpan
         sudo chmod 0755 /bin/aliyunpan
         sudo sh -c 'echo "${{ secrets.aliyunpan_us_node }} api.alipan.com auth.alipan.com www.alipan.com" >> /etc/hosts'
         export ALIYUNPAN_CONFIG_DIR="$(pwd)/.aliyunpan"
